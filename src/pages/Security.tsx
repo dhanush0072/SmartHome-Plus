@@ -203,9 +203,6 @@ export default function Security() {
         style={{
           padding: 24,
           marginBottom: 20,
-          background: "rgba(255, 255, 255, 0.32)",
-          backdropFilter: "blur(24px) saturate(140%)",
-          WebkitBackdropFilter: "blur(24px) saturate(140%)",
           border: "1px solid rgba(255, 255, 255, 0.45)",
           boxShadow:
             "0 12px 40px rgba(0, 0, 0, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.35)",
@@ -400,9 +397,6 @@ export default function Security() {
           className="glass-card security-lower-panel"
           style={{
             padding: 24,
-            background: "rgba(255, 255, 255, 0.22)",
-            backdropFilter: "blur(24px) saturate(140%)",
-            WebkitBackdropFilter: "blur(24px) saturate(140%)",
             border: "1px solid rgba(255, 255, 255, 0.38)",
             boxShadow:
               "0 12px 40px rgba(0, 0, 0, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.35)",

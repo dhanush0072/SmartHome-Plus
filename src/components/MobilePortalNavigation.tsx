@@ -4,7 +4,6 @@ import {
   ChevronRight,
   Cpu,
   DoorOpen,
-  FileText,
   GitBranch,
   Home,
   LayoutDashboard,
@@ -13,7 +12,6 @@ import {
   MessageSquare,
   Settings,
   Shield,
-  ShieldCheck,
   Sliders,
   User,
   Users,
@@ -80,38 +78,20 @@ const userMenuGroups: MenuGroup[] = [
 
 const adminMenuGroups: MenuGroup[] = [
   {
-    title: "Platform operations",
+    title: "Platform overview",
     items: [
+      { label: "Dashboard", page: "admin", icon: <LayoutDashboard size={19} /> },
       { label: "User management", page: "admin-users", icon: <Users size={19} /> },
       { label: "Device management", page: "admin-devices", icon: <Cpu size={19} /> },
       { label: "System monitoring", page: "admin-monitoring", icon: <Activity size={19} /> },
-      { label: "Energy overview", page: "admin-energy", icon: <Zap size={19} /> },
-      { label: "Automation management", page: "admin-automation", icon: <GitBranch size={19} /> },
-      { label: "Notifications", page: "admin-notifications", icon: <Bell size={19} /> },
-      { label: "Feedback management", page: "admin-feedback", icon: <MessageSquare size={19} /> },
-      { label: "Activity logs", page: "admin-logs", icon: <FileText size={19} /> },
       { label: "System settings", page: "admin-settings", icon: <Sliders size={19} /> },
-    ],
-  },
-  {
-    title: "Account",
-    items: [
-      { label: "Admin profile", page: "admin-profile", icon: <ShieldCheck size={19} /> },
     ],
   },
 ]
 
 function isMenuSectionPage(page: Page, admin: boolean) {
   return admin
-    ? [
-        "admin-energy",
-        "admin-automation",
-        "admin-notifications",
-        "admin-feedback",
-        "admin-logs",
-        "admin-settings",
-        "admin-profile",
-      ].includes(page)
+    ? ["admin", "admin-users", "admin-devices", "admin-monitoring", "admin-settings"].includes(page)
     : ["security", "energy", "notifications", "profile", "settings"].includes(page)
 }
 

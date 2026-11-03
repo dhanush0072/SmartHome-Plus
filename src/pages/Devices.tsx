@@ -417,7 +417,7 @@ export default function Devices() {
                 transition: "transform 0.25s ease, box-shadow 0.25s ease",
                 position: "relative",
                 background: device.on
-                  ? `linear-gradient(135deg, ${hexToRgba(device.color, 0.12)}, rgba(255,255,255,0.22))`
+                  ? `linear-gradient(135deg, ${hexToRgba(device.color, 0.12)}, var(--glass-surface-soft))`
                   : undefined,
                 boxShadow: device.on
                   ? `0 16px 40px ${hexToRgba(device.color, 0.12)}`
@@ -573,13 +573,6 @@ export default function Devices() {
             height: "fit-content",
             position: "sticky",
             top: 120,
-            background: "rgba(255, 255, 255, 0.35)",
-            backdropFilter: "blur(30px) saturate(180%)",
-            WebkitBackdropFilter: "blur(30px) saturate(180%)",
-            border: "1px solid rgba(255, 255, 255, 0.55)",
-            boxShadow:
-              "0 20px 50px rgba(0, 0, 0, 0.08), inset 0 1px 1px rgba(255, 255, 255, 0.8), inset 0 -1px 1px rgba(255, 255, 255, 0.2)",
-            borderRadius: 24,
           }}
         >
           {/* Header */}
@@ -968,14 +961,12 @@ function ScheduleModal({
 
       {/* Modal */}
       <div
+        className="portal-glass-surface"
         style={{
           position: "fixed",
           top: "50%",
           left: "50%",
           transform: "translate(-50%, -50%)",
-          background: "rgba(255, 255, 255, 0.35)",
-          backdropFilter: "blur(30px) saturate(180%)",
-          WebkitBackdropFilter: "blur(30px) saturate(180%)",
           border: "1px solid rgba(255, 255, 255, 0.55)",
           borderRadius: 24,
           boxShadow:

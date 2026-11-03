@@ -1,17 +1,4 @@
-import {
-  BarChart3,
-  Users,
-  Cpu,
-  Activity,
-  Zap,
-  GitBranch,
-  Bell,
-  MessageSquare,
-  FileText,
-  Sliders,
-  ShieldCheck,
-  Shield,
-} from "lucide-react"
+import { BarChart3, Users, Cpu, Activity, Sliders, Shield } from "lucide-react"
 import { useState, useEffect } from "react"
 import pageBackground from "../Assets/room.png"
 import FloatingPortalSidebar from "./FloatingPortalSidebar"
@@ -41,33 +28,10 @@ const adminNavItems: {
     label: "System Monitoring",
     page: "admin-monitoring",
   },
-  { icon: <Zap size={18} />, label: "Energy Overview", page: "admin-energy" },
-  {
-    icon: <GitBranch size={18} />,
-    label: "Automation Management",
-    page: "admin-automation",
-  },
-  {
-    icon: <Bell size={18} />,
-    label: "Notifications",
-    page: "admin-notifications",
-  },
-  {
-    icon: <MessageSquare size={18} />,
-    label: "Feedback Management",
-    page: "admin-feedback",
-    badgeKey: "feedback",
-  },
-  { icon: <FileText size={18} />, label: "Activity Logs", page: "admin-logs" },
   {
     icon: <Sliders size={18} />,
     label: "System Settings",
     page: "admin-settings",
-  },
-  {
-    icon: <ShieldCheck size={18} />,
-    label: "Admin Profile",
-    page: "admin-profile",
   },
 ]
 
@@ -144,10 +108,6 @@ export default function AdminLayout({
                 SmartHome<span>+</span>
               </strong>
               <small>Admin Console</small>
-            </span>
-            <span className="portal-brand-status">
-              <span className="animate-pulse-soft" />
-              Cluster Online (99.98%)
             </span>
           </div>
         }

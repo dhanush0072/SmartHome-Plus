@@ -229,7 +229,7 @@ export default function Notifications() {
                     ? "1px solid rgba(0,122,255,0.3)"
                     : "1px solid var(--glass-border)",
                   background: n.unread
-                    ? "rgba(255,255,255,0.58)"
+                    ? "var(--glass-surface-strong)"
                     : "var(--glass-bg)",
                   borderRadius: 16,
                   transition: "all 0.2s ease",

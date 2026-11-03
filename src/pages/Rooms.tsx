@@ -521,6 +521,7 @@ export default function Rooms() {
           }}
         >
           <aside
+            className="portal-glass-surface"
             role="dialog"
             aria-modal="true"
             aria-labelledby="room-details-title"
@@ -530,12 +531,9 @@ export default function Rooms() {
               height: "100%",
               overflowY: "auto",
               padding: 24,
-              background: "rgba(255,255,255,0.42)",
               borderLeft: "1px solid rgba(255,255,255,0.58)",
               boxShadow:
                 "-20px 0 60px rgba(26,50,65,0.14), inset 1px 0 0 rgba(255,255,255,0.55)",
-              backdropFilter: "blur(30px) saturate(180%)",
-              WebkitBackdropFilter: "blur(30px) saturate(180%)",
               animation: "room-details-slide-in 0.24s ease both",
               pointerEvents: "auto",
             }}
@@ -670,6 +668,7 @@ export default function Rooms() {
           }}
         >
           <form
+            className="portal-glass-surface"
             onSubmit={addRoom}
             role="dialog"
             aria-modal="true"
@@ -681,11 +680,8 @@ export default function Rooms() {
               overflowY: "auto",
               padding: 28,
               borderRadius: 26,
-              background: "rgba(255,255,255,0.72)",
               border: "1px solid rgba(255,255,255,0.78)",
               boxShadow: "0 24px 70px rgba(0,0,0,0.2)",
-              backdropFilter: "blur(30px) saturate(160%)",
-              WebkitBackdropFilter: "blur(30px) saturate(160%)",
             }}
           >
             <div
