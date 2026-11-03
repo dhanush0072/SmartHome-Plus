@@ -12,6 +12,8 @@ import {
   Zap,
   Flame,
   Power,
+  Minus,
+  Plus as PlusIcon,
 } from "lucide-react"
 import roomLiving from "../Assets/room.png"
 import roomBedroom from "../Assets/room5.jpg"
@@ -190,17 +192,36 @@ export default function Rooms() {
   const toggleAc = (id: number) => {
     const room = rooms.find((item) => item.id === id)
     if (!room) return
-    const nextState = !room.ac
-    setRooms((prev) => prev.map((r) => (r.id === id ? { ...r, ac: !r.ac } : r)))
-    setDevices((prev) => {
-      const next = prev.map((device) =>
-        device.room === room.name && device.type === "ac"
-          ? { ...device, on: nextState }
-          : device,
-      )
-      if (JSON.stringify(next) !== JSON.stringify(prev)) saveStoredDevices(next)
-      return next
-    })
+    const roomAcDevices = devices.filter(
+      (device) => device.room === room.name && device.type === "ac",
+    )
+    if (!roomAcDevices.length) return
+    const nextState = roomAcDevices.some((device) => !device.on)
+    const next = devices.map((device) =>
+      device.room === room.name && device.type === "ac"
+        ? { ...device, on: nextState }
+        : device,
+    )
+    setDevices(next)
+    saveStoredDevices(next)
+    setRooms((prev) =>
+      prev.map((item) =>
+        item.id === room.id ? { ...item, ac: nextState } : item,
+      ),
+    )
+  }
+
+  const adjustAcTemperature = (deviceId: number, change: number) => {
+    const target = devices.find(
+      (device) => device.id === deviceId && device.type === "ac",
+    )
+    if (!target) return
+    const temperature = Math.min(30, Math.max(16, (target.temp ?? 22) + change))
+    const next = devices.map((device) =>
+      device.id === deviceId ? { ...device, temp: temperature } : device,
+    )
+    setDevices(next)
+    saveStoredDevices(next)
   }
 
   const toggleRoomDevice = (deviceId: number) => {
@@ -426,11 +447,19 @@ export default function Rooms() {
                       toggleLight(room.id)
                     }}
                   />
-                  {!["Bathroom", "Garage", "Garden"].includes(room.name) && (
+                  {devices.some(
+                    (device) =>
+                      device.room === room.name && device.type === "ac",
+                  ) && (
                     <QuickControl
                       icon={<Wind size={16} />}
                       label="AC"
-                      active={room.ac}
+                      active={devices.some(
+                        (device) =>
+                          device.room === room.name &&
+                          device.type === "ac" &&
+                          device.on,
+                      )}
                       color="#5AC8FA"
                       onClick={(e) => {
                         e.stopPropagation()
@@ -617,6 +646,11 @@ export default function Rooms() {
                     key={device.id}
                     device={device}
                     onToggle={() => toggleRoomDevice(device.id)}
+                    onTemperatureChange={
+                      device.type === "ac"
+                        ? (change) => adjustAcTemperature(device.id, change)
+                        : undefined
+                    }
                   />
                 ))
               ) : (
@@ -636,11 +670,12 @@ export default function Rooms() {
                 color="#FF9F0A"
                 onClick={() => toggleLight(selectedRoom.id)}
               />
-              {selectedRoom.ac ||
-              !["Bathroom", "Garage", "Garden"].includes(selectedRoom.name) ? (
+              {selectedRoomDevices.some((device) => device.type === "ac") ? (
                 <RoomStatusRow
                   label="Air Conditioning"
-                  active={selectedRoom.ac}
+                  active={selectedRoomDevices.some(
+                    (device) => device.type === "ac" && device.on,
+                  )}
                   color="#5AC8FA"
                   onClick={() => toggleAc(selectedRoom.id)}
                 />
@@ -963,9 +998,11 @@ function DetailMetric({
 function DeviceRow({
   device,
   onToggle,
+  onTemperatureChange,
 }: {
   device: DeviceState
   onToggle: () => void
+  onTemperatureChange?: (change: number) => void
 }) {
   return (
     <div
@@ -1010,6 +1047,40 @@ function DeviceRow({
         <span style={{ color: "#6E6E73", fontSize: 11 }}>
           {device.on ? "On" : "Off"} · {device.type}
         </span>
+        {device.type === "ac" && onTemperatureChange && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              marginTop: 7,
+              color: "#1D1D1F",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            <button
+              type="button"
+              aria-label={`Decrease ${device.name} temperature`}
+              onClick={() => onTemperatureChange(-1)}
+              disabled={(device.temp ?? 22) <= 16}
+              style={temperatureStepButtonStyle}
+            >
+              <Minus size={13} />
+            </button>
+            <span>{device.temp ?? 22}°C</span>
+            <button
+              type="button"
+              aria-label={`Increase ${device.name} temperature`}
+              onClick={() => onTemperatureChange(1)}
+              disabled={(device.temp ?? 22) >= 30}
+              style={temperatureStepButtonStyle}
+            >
+              <PlusIcon size={13} />
+            </button>
+            <span style={{ color: "#6E6E73", fontSize: 10 }}>Set point</span>
+          </div>
+        )}
       </div>
       <button
         type="button"
@@ -1034,6 +1105,18 @@ function DeviceRow({
       </button>
     </div>
   )
+}
+
+const temperatureStepButtonStyle: React.CSSProperties = {
+  width: 25,
+  height: 25,
+  display: "grid",
+  placeItems: "center",
+  border: "1px solid rgba(0,122,255,0.2)",
+  borderRadius: 8,
+  background: "rgba(0,122,255,0.08)",
+  color: "#007AFF",
+  cursor: "pointer",
 }
 
 function RoomStatusRow({

@@ -329,13 +329,15 @@ export function getStoredDevices(): DeviceState[] {
   }
 }
 
-export function saveStoredDevices(devices: DeviceState[]) {
+export function saveStoredDevices(devices: DeviceState[]): boolean {
   try {
     localStorage.setItem(STORAGE_DEVICES, JSON.stringify(devices))
     window.dispatchEvent(
       new CustomEvent("smarthome_devices_change", { detail: devices }),
     )
+    return true
   } catch {}
+  return false
 }
 
 export function getStoredRooms(): RoomState[] {
@@ -347,13 +349,15 @@ export function getStoredRooms(): RoomState[] {
   }
 }
 
-export function saveStoredRooms(rooms: RoomState[]) {
+export function saveStoredRooms(rooms: RoomState[]): boolean {
   try {
     localStorage.setItem(STORAGE_ROOMS, JSON.stringify(rooms))
     window.dispatchEvent(
       new CustomEvent("smarthome_rooms_change", { detail: rooms }),
     )
+    return true
   } catch {}
+  return false
 }
 
 export function getStoredSecurity(): SecurityState {
@@ -365,13 +369,15 @@ export function getStoredSecurity(): SecurityState {
   }
 }
 
-export function saveStoredSecurity(sec: SecurityState) {
+export function saveStoredSecurity(sec: SecurityState): boolean {
   try {
     localStorage.setItem(STORAGE_SECURITY, JSON.stringify(sec))
     window.dispatchEvent(
       new CustomEvent("smarthome_security_change", { detail: sec }),
     )
+    return true
   } catch {}
+  return false
 }
 
 export function getStoredAutomations(): AutomationState[] {
@@ -383,13 +389,482 @@ export function getStoredAutomations(): AutomationState[] {
   }
 }
 
-export function saveStoredAutomations(autos: AutomationState[]) {
+export function saveStoredAutomations(autos: AutomationState[]): boolean {
   try {
     localStorage.setItem(STORAGE_AUTOMATIONS, JSON.stringify(autos))
     window.dispatchEvent(
       new CustomEvent("smarthome_automations_change", { detail: autos }),
     )
+    return true
   } catch {}
+  return false
+}
+
+type CommandResult = { text: string; actionTaken?: boolean }
+
+const normalizeCommand = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+const hasAny = (value: string, phrases: string[]) =>
+  phrases.some((phrase) => value.includes(phrase))
+
+function parseExpandedCommand(
+  rawInput: string,
+  onNavigate?: (p: Page) => void,
+): CommandResult | null {
+  const input = normalizeCommand(rawInput)
+  if (!input) return { text: "Tell me what you'd like help with, and I'll do my best." }
+
+  const devices = getStoredDevices()
+  const rooms = getStoredRooms()
+  const security = getStoredSecurity()
+  const automations = getStoredAutomations()
+  const simulatedNote = "This is simulated SmartHome+ demo data; no physical device or live service is connected."
+  const activeDevices = devices.filter((device) => device.on)
+  const currentLoad = activeDevices.reduce((total, device) => total + device.energy, 0)
+  const estimateText = `${currentLoad.toFixed(2)} kW estimated current load`
+  const roomMatches = rooms.filter((room) => input.includes(normalizeCommand(room.name)))
+  const directDeviceMatches = devices.filter((device) =>
+    input.includes(normalizeCommand(device.name)),
+  )
+  const typeMatches = (device: DeviceState) => {
+    const type = normalizeCommand(device.type)
+    const aliases: Record<string, string[]> = {
+      light: ["light", "lights", "lighting", "lamp", "lamps"],
+      fan: ["fan", "fans"],
+      ac: ["ac", "air conditioning", "air conditioner", "air conditioners", "climate", "thermostat", "temperature", "temp"],
+      tv: ["tv", "television"],
+      plug: ["plug", "plugs"],
+      fridge: ["fridge", "refrigerator"],
+      washer: ["washer", "washing machine"],
+      heater: ["heater", "water heater"],
+    }
+    return (aliases[type] ?? [type]).some((alias) =>
+      new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(input),
+    )
+  }
+  const targetDevices = () => {
+    let matches = directDeviceMatches
+    if (matches.length === 0) {
+      matches = devices.filter((device) => {
+        const inRoom =
+          roomMatches.length === 0 ||
+          roomMatches.some((room) => room.name === device.room)
+        const allInRoom = roomMatches.length > 0 && hasAny(input, ["devices", "everything"])
+        return inRoom && (allInRoom || typeMatches(device))
+      })
+    }
+    return matches
+  }
+  const saveDeviceChanges = (
+    predicate: (device: DeviceState) => boolean,
+    update: (device: DeviceState) => DeviceState,
+    successText: (names: string[]) => string,
+  ): CommandResult => {
+    const matches = devices.filter(predicate)
+    if (matches.length === 0) {
+      return { text: "I couldn't find a matching device in the saved demo device list. Try the device name or room." }
+    }
+    const updated = devices.map((device) =>
+      predicate(device) ? update({ ...device }) : device,
+    )
+    if (!saveStoredDevices(updated)) {
+      return { text: "I couldn't save that change to the demo device state. Please check browser storage and try again." }
+    }
+    return {
+      text: `${successText(matches.map((device) => device.name))} ${simulatedNote}`,
+      actionTaken: true,
+    }
+  }
+  const formatDevices = (list: DeviceState[]) =>
+    list.length
+      ? list.map((device) => `${device.name} (${device.room}, ${device.on ? "on" : "off"})`).join("; ")
+      : "No matching devices are in the saved demo list."
+  const formatDoorStatus = () =>
+    security.doors.map((door) => `${door.name}: ${door.locked ? "locked" : "unlocked"}`).join("; ")
+  const automationMatches = () =>
+    automations.filter((automation) => {
+      const words = normalizeCommand(automation.name)
+        .split(" ")
+        .filter((word) => word.length > 3 && word !== "good")
+      return (
+        input.includes(normalizeCommand(automation.name)) ||
+        words.some((word) => input.includes(word))
+      )
+    })
+
+  if (hasAny(input, ["what can you do", "help", "commands", "what do you do"])) {
+    return {
+      text: "I can manage demo device states, check saved door-lock status, review estimated energy data, view or toggle saved automations, and summarize your home. I can't verify live connections, security events, notifications, or execute real schedules.",
+    }
+  }
+
+  const navRoutes: Array<[string[], Page, string]> = [
+    [["dashboard"], "dashboard", "Dashboard"],
+    [["rooms"], "rooms", "Rooms"],
+    [["devices"], "devices", "Devices"],
+    [["security"], "security", "Security"],
+    [["energy"], "energy", "Energy"],
+    [["automation", "automations"], "automation", "Automations"],
+    [["notifications"], "notifications", "Notifications"],
+    [["profile"], "profile", "Profile"],
+    [["settings"], "settings", "Settings"],
+  ]
+  const navMatch = navRoutes.find(
+    ([names]) =>
+      (/^(open|go to|navigate to) /.test(input) &&
+        names.some((name) => input.endsWith(name))) ||
+      names.some((name) => input === `show ${name}`),
+  )
+  if (navMatch) {
+    onNavigate?.(navMatch[1])
+    return { text: `Opening ${navMatch[2]}.`, actionTaken: true }
+  }
+
+  const isGoodMorning = input === "good morning" || input.includes("good morning shortcut")
+  const isGoodNight = input === "good night" || input.includes("good night checklist")
+  const isLeaving = hasAny(input, ["im leaving", "i am leaving", "im going out", "im away"])
+  const isHome = input === "im home" || input === "i am home" || input.includes("just got home")
+  if (isGoodMorning || isGoodNight || isLeaving || isHome) {
+    if (isGoodMorning) {
+      const unreadNote = "Pending notifications aren't connected to assistant data."
+      return {
+        text: `Good morning! Your saved demo device status: ${formatDevices(devices)}. Energy: ${estimateText}; a daily kWh total isn't available. ${unreadNote} ${simulatedNote}`,
+      }
+    }
+    if (isGoodNight) {
+      const lights = devices.filter((device) => device.type === "light")
+      const nightRules = automations.filter((automation) =>
+        /night|sleep/i.test(automation.name),
+      )
+      return {
+        text: `Bedtime checklist: lights are ${lights.filter((device) => device.on).length} on and ${lights.filter((device) => !device.on).length} off; ${activeDevices.length} of ${devices.length} saved devices are on. Security is ${security.armed ? "armed" : "disarmed"} with door locks: ${formatDoorStatus()}. Night-time automations: ${nightRules.map((rule) => `${rule.name} (${rule.active ? "enabled" : "disabled"})`).join(", ") || "none saved"}. ${simulatedNote}`,
+      }
+    }
+    if (isLeaving) {
+      const unlocked = security.doors.filter((door) => !door.locked)
+      return {
+        text: `Before you leave: security is ${security.armed ? "armed" : "disarmed"}; check these saved door states: ${formatDoorStatus()}. Active demo devices: ${formatDevices(activeDevices)}. ${unlocked.length ? `Attention: ${unlocked.map((door) => door.name).join(", ")} are unlocked.` : "No unlocked doors are recorded."} Live sensors and actual device connections aren't available. ${simulatedNote}`,
+      }
+    }
+    return {
+      text: `Welcome home! Saved rooms: ${rooms.map((room) => room.name).join(", ")}. Devices: ${formatDevices(devices)}. Pending notifications aren't connected to assistant data. ${simulatedNote}`,
+    }
+  }
+
+  const isMorningRoutine =
+    hasAny(input, ["start good morning", "run good morning", "good morning routine"])
+  const isNightRoutine =
+    hasAny(input, ["start good night", "run good night", "good night routine"])
+  if (isMorningRoutine || isNightRoutine) {
+    const updatedDevices = devices.map((device) => {
+      if (isMorningRoutine && device.room === "Kitchen" && device.type === "light") {
+        return { ...device, on: true }
+      }
+      if (isMorningRoutine && device.type === "ac" && device.room === "Living Room") {
+        return { ...device, temp: 24, on: true }
+      }
+      if (isNightRoutine && device.type === "light") return { ...device, on: false }
+      if (isNightRoutine && device.type === "ac") return { ...device, temp: 21, on: true }
+      return device
+    })
+    if (!saveStoredDevices(updatedDevices)) {
+      return { text: "I couldn't save the routine's simulated device changes. Please try again." }
+    }
+    if (isNightRoutine) {
+      const updatedSecurity = {
+        ...security,
+        armed: true,
+        doors: security.doors.map((door) => ({ ...door, locked: true })),
+      }
+      if (!saveStoredSecurity(updatedSecurity)) {
+        return { text: "The simulated device changes were saved, but I couldn't save the security state. Please check browser storage." }
+      }
+    }
+    return {
+      text: `${isMorningRoutine ? "Good Morning" : "Good Night"} routine applied to the saved demo states only. No physical devices or security system were controlled.`,
+      actionTaken: true,
+    }
+  }
+
+  if (
+    hasAny(input, ["home summary", "home status", "whats happening in my home", "what is happening in my home", "todays home report", "today home report", "status summary"])
+  ) {
+    const enabled = automations.filter((automation) => automation.active)
+    const unlocked = security.doors.filter((door) => !door.locked)
+    return {
+      text: `Here's your SmartHome+ home summary. Devices: ${activeDevices.length} of ${devices.length} saved demo devices are on. Security: ${security.armed ? "armed" : "disarmed"}; ${security.doors.length - unlocked.length} of ${security.doors.length} saved door locks are locked. Energy: ${estimateText}; daily/weekly/monthly totals aren't available to the assistant. Active automations: ${enabled.map((automation) => automation.name).join(", ") || "none"}. Pending notifications aren't connected to assistant data. ${simulatedNote}`,
+    }
+  }
+
+  if (
+    hasAny(input, ["security history", "security events", "recent security", "security alert", "security alerts", "motion detected", "sensor history"])
+  ) {
+    return {
+      text: "This prototype has no security-event or alert history connected to the assistant, so I can't report recent events. I can check the saved simulated door-lock status instead.",
+    }
+  }
+  if (hasAny(input, ["window status", "window sensor", "windows secure", "check windows"])) {
+    return { text: "Window sensor state isn't included in the available SmartHome+ demo data, so I can't verify window status." }
+  }
+  if (
+    hasAny(input, ["home secure", "security status", "door status", "door sensor status", "front door status", "check the front door", "check front door", "front door sensor", "doors locked", "door locked"])
+  ) {
+    const requestedDoor = security.doors.filter((door) =>
+      input.includes(normalizeCommand(door.name)),
+    )
+    if (requestedDoor.length) {
+      return {
+        text: `Saved simulated door-lock status: ${requestedDoor.map((door) => `${door.name} is ${door.locked ? "locked" : "unlocked"}`).join("; ")}. This is not a live sensor reading.`,
+      }
+    }
+    return {
+      text: `Saved simulated security status: ${security.armed ? "armed" : "disarmed"}. Door locks: ${formatDoorStatus()}. No live security monitoring or emergency protection is connected.`,
+    }
+  }
+
+  const securityAction = input.match(/\b(lock|unlock)\s+(all\s+)?(.+)$/)
+  if (
+    securityAction &&
+    (hasAny(input, ["door", "doors", "gate", "front", "back", "garage", "side"]) ||
+      hasAny(input, ["security", "system"]))
+  ) {
+    const unlock = securityAction[1] === "unlock"
+    const requestedDoors = security.doors.filter((door) => {
+      const name = normalizeCommand(door.name)
+      return (
+        input.includes(name) ||
+        (securityAction[2] !== undefined && hasAny(input, ["all doors", "all gates"]))
+      )
+    })
+    if (!requestedDoors.length) return { text: "I couldn't match that to a saved door or gate." }
+    const updatedSecurity = {
+      ...security,
+      doors: security.doors.map((door) =>
+        requestedDoors.some((requested) => requested.name === door.name)
+          ? {
+              ...door,
+              locked: !unlock,
+              lastAction: "Just now",
+              who: "AI Assistant (simulated)",
+            }
+          : door,
+      ),
+    }
+    if (!saveStoredSecurity(updatedSecurity)) return { text: "I couldn't save that simulated door-lock change. Please try again." }
+    return {
+      text: `Updated the saved demo lock state: ${requestedDoors.map((door) => door.name).join(", ")} ${unlock ? "unlocked" : "locked"}. This is simulated; no physical lock was controlled.`,
+      actionTaken: true,
+    }
+  }
+  if (hasAny(input, ["arm security", "arm system", "disarm security", "disarm system"])) {
+    const armed = !hasAny(input, ["disarm"])
+    if (!saveStoredSecurity({ ...security, armed })) return { text: "I couldn't save the simulated security setting. Please try again." }
+    return {
+      text: `Saved demo security state is now ${armed ? "armed" : "disarmed"}. This is simulated; no real security system was controlled.`,
+      actionTaken: true,
+    }
+  }
+
+  if (hasAny(input, ["pending notification", "unread notification", "show notifications", "notification alert"])) {
+    return {
+      text: "The notification screen uses demo content that isn't exposed to the assistant, so I can't determine which notifications are pending or unread.",
+    }
+  }
+
+  if (
+    roomMatches.length > 0 &&
+    hasAny(input, ["show", "list", "check", "status", "what devices", "which devices"])
+  ) {
+    const inRoom = devices.filter((device) =>
+      roomMatches.some((room) => room.name === device.room),
+    )
+    return {
+      text: `${roomMatches.map((room) => room.name).join(", ")} demo devices: ${formatDevices(inRoom)}. These are saved simulated states; online connectivity isn't tracked.`,
+    }
+  }
+
+  if ((input.includes("offline") || input.includes("disconnected")) && input.includes("device")) {
+    return {
+      text: "The saved device data tracks on/off state but has no online/offline connection field. I can't identify offline devices from this prototype.",
+    }
+  }
+  if (hasAny(input, ["connected devices", "list devices", "show devices", "show my devices", "device status", "check devices", "what devices are on", "which devices are on", "what devices are off", "which devices are off"])) {
+    const statusList = hasAny(input, ["are on", "devices on"])
+      ? activeDevices
+      : hasAny(input, ["are off", "devices off"])
+        ? devices.filter((device) => !device.on)
+        : devices
+    return {
+      text: `Saved demo device list (${statusList.length}): ${formatDevices(statusList)}. "On" means the saved simulated state; connection status is not tracked.`,
+    }
+  }
+
+  if (hasAny(input, ["weekly energy", "energy this week", "energy last week"])) {
+    return { text: `Weekly kWh totals aren't available in the assistant's data. I can report an estimated current load of ${estimateText}; this isn't a live meter reading.` }
+  }
+  if (hasAny(input, ["monthly energy cost", "monthly cost", "energy bill", "estimate energy cost"])) {
+    const monthlyEquivalent = currentLoad * 24 * 30
+    const costEstimate = monthlyEquivalent * 8
+    return {
+      text: `There is no measured monthly total. At the current simulated load (${estimateText}), a constant-load 30-day estimate is about ${monthlyEquivalent.toFixed(1)} kWh or ₹${costEstimate.toFixed(2)} at an assumed ₹8/kWh. This is only an illustration, not a live meter reading or bill.`,
+    }
+  }
+  if (hasAny(input, ["monthly energy", "energy this month", "monthly usage", "monthly consumption"])) {
+    return { text: `Monthly kWh totals aren't available in the assistant's data. I can report an estimated current load of ${estimateText}; this isn't a live meter reading.` }
+  }
+  if (hasAny(input, ["energy saving suggestion", "energy saving suggestions", "save energy", "reduce energy", "energy tips"])) {
+    const largest = [...activeDevices].sort((a, b) => b.energy - a.energy)[0]
+    return {
+      text: `Energy-saving ideas: turn off devices when not in use, use schedules only when the automation service is available, and review temperature settings. ${largest ? `${largest.name} currently has the largest saved sample load (${largest.energy} kW).` : "No active device load is recorded."} These are demo estimates, not live meter readings.`,
+    }
+  }
+  if (hasAny(input, ["most energy", "highest energy", "energy consuming", "energy-consuming", "largest energy", "energy cost", "cost of energy", "energy did i use", "energy consumption", "energy usage", "energy today", "today energy", "today report"])) {
+    const largest = [...activeDevices].sort((a, b) => b.energy - a.energy)[0]
+    if (hasAny(input, ["which device", "highest", "most energy", "consumes the most"])) {
+      return {
+        text: largest
+          ? `${largest.name} has the largest current sample load among active saved devices (${largest.energy} kW). This is simulated device data, not a live energy reading.`
+          : "No active device load is recorded in the saved demo data.",
+      }
+    }
+    const dailyEquivalent = currentLoad * 24
+    const costEstimate = dailyEquivalent * 8
+    return {
+      text: `The assistant doesn't have an actual daily kWh total. Based only on the current simulated load (${estimateText}), a constant-load 24-hour extrapolation would be about ${dailyEquivalent.toFixed(2)} kWh and ₹${costEstimate.toFixed(2)} at an assumed ₹8/kWh. This is a rough illustration, not measured usage or a bill.`,
+    }
+  }
+
+  if (hasAny(input, ["show my automations", "show automations", "list automations", "active automations", "automation rules"])) {
+    const list = automations.filter((automation) =>
+      hasAny(input, ["active automations", "active automation"]) ? automation.active : true,
+    )
+    return {
+      text: `${list.length ? list.map((automation) => `${automation.name} (${automation.active ? "enabled" : "disabled"}; trigger: ${automation.trigger})`).join("; ") : "No automations are saved"}. These are stored demo rules; automatic execution is not connected.`,
+    }
+  }
+  const toggleMatch = input.match(/\b(enable|turn on|activate|disable|turn off|deactivate)\s+(.+?)(?:\s+automation|\s+routine)?$/)
+  if (
+    toggleMatch &&
+    hasAny(input, ["automation", "routine", "good morning", "good night", "morning", "night", "away", "vacation", "movie", "party"]) &&
+    !hasAny(input, ["create automation", "add automation", "new automation", "create routine", "delete automation", "remove automation", "edit automation", "update automation", "change automation"])
+  ) {
+    const enable = ["enable", "turn on", "activate"].includes(toggleMatch[1])
+    const matches = automationMatches()
+    if (matches.length > 1) {
+      return { text: `I found multiple matching automations: ${matches.map((automation) => automation.name).join(", ")}. Which one do you mean?` }
+    }
+    if (!matches.length) {
+      return { text: "I couldn't match that name to a saved automation. Ask me to list the saved automations first." }
+    }
+    const updated = automations.map((automation) =>
+      automation.id === matches[0].id ? { ...automation, active: enable } : automation,
+    )
+    if (!saveStoredAutomations(updated)) {
+      return { text: "I couldn't save that automation change to browser storage. Please try again." }
+    }
+    return { text: `${matches[0].name} is ${enable ? "enabled" : "disabled"} in the saved demo rules. The rule won't run automatically in this prototype.`, actionTaken: true }
+  }
+  if (hasAny(input, ["delete automation", "remove automation", "delete routine", "remove routine"])) {
+    return { text: "Deleting a saved automation isn't supported by the current automation interface. No rule was deleted." }
+  }
+  if (hasAny(input, ["create automation", "add automation", "new automation", "create routine"])) {
+    return { text: "I can't create a rule through chat in this prototype. The automation builder can create demo rules, but it doesn't provide a connected scheduler for automatic execution." }
+  }
+  if (/\b(edit|update|change)\b/.test(input) && hasAny(input, ["automation", "routine"])) {
+    const matches = automationMatches()
+    if (matches.length !== 1) {
+      return { text: matches.length ? `I found multiple matching rules: ${matches.map((automation) => automation.name).join(", ")}. Which one should I edit?` : "Name the saved automation you'd like to edit, then specify its new trigger or action." }
+    }
+    const replacement = input.match(/\b(?:to|as)\s+(.+)$/)
+    if (!replacement) return { text: `What should I change for ${matches[0].name}: its trigger or its action?` }
+    const updated = automations.map((automation) => {
+      if (automation.id !== matches[0].id) return automation
+      if (hasAny(input, ["trigger", "schedule", "time"])) return { ...automation, trigger: replacement[1] }
+      if (hasAny(input, ["action", "do"])) return { ...automation, actions: [replacement[1]] }
+      return automation
+    })
+    if (updated.every((automation, index) => JSON.stringify(automation) === JSON.stringify(automations[index]))) {
+      return { text: "Please specify whether to change the trigger/time or the action. No change was made." }
+    }
+    if (!saveStoredAutomations(updated)) return { text: "I couldn't save that automation edit to browser storage. Please try again." }
+    return { text: `Updated the saved ${matches[0].name} demo rule. Automatic execution is not available in this prototype.`, actionTaken: true }
+  }
+
+  const scheduleTime = input.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/)
+  if (hasAny(input, ["schedule", "at "]) && scheduleTime) {
+    const turnOn = /\b(?:turn|switch|power)\s+on\b|\b(?:lights?|devices?)\s+on\b/.test(input)
+    const turnOff = /\b(?:turn|switch|power)\s+off\b|\b(?:lights?|devices?)\s+off\b/.test(input)
+    if (!turnOn && !turnOff) {
+      return { text: "Should I save a turn-on or turn-off reminder for that time? The prototype doesn't execute schedules automatically." }
+    }
+    const targets = targetDevices()
+    if (targets.length > 1 && roomMatches.length === 0 && !hasAny(input, ["all lights", "all devices"])) {
+      return { text: `I found multiple possible devices: ${targets.map((device) => device.name).join(", ")}. Which one should have the schedule?` }
+    }
+    if (!targets.length) return { text: "I couldn't identify a saved device for that schedule. Include its name or room." }
+    const timeLabel = `${scheduleTime[1]}${scheduleTime[2] ? `:${scheduleTime[2]}` : ""} ${scheduleTime[3].toUpperCase()}`
+    const updated = devices.map((device) =>
+      targets.some((target) => target.id === device.id)
+        ? { ...device, schedule: `Reminder: turn ${turnOn ? "on" : "off"} at ${timeLabel} (not executed)` }
+        : device,
+    )
+    if (!saveStoredDevices(updated)) return { text: "I couldn't save that schedule reminder to browser storage. Please try again." }
+    return { text: `Saved a demo schedule reminder to ${targets.map((device) => device.name).join(", ")} for ${timeLabel}. The prototype has no scheduler, so it will not execute automatically.`, actionTaken: true }
+  }
+
+  const setBrightness = input.match(/\b(?:brightness\s+(?:to\s+)?|dim\b.*?\bto\s+|set\b.*?\blights?\s+to\s+)(\d{1,3})\s*(?:percent|%)?\b/)
+  const setTemperature = input.match(/\b(?:set|change|adjust)\s+(?:the\s+)?(?:(?:living room|bedroom|kitchen|bathroom|office)\s+)?(?:temperature|temp|ac|climate)\s+(?:to\s+)?(\d{1,2})\s*(?:degrees|degree|c)?\b/)
+  const setFanSpeed = input.match(/\b(?:fan speed|speed)\s*(?:to\s*)?(\d{1,2})\b/)
+  if (setBrightness || setTemperature || setFanSpeed) {
+    const targets = targetDevices()
+    const field = setBrightness ? "brightness" : setTemperature ? "temp" : "speed"
+    const value = Number((setBrightness ?? setTemperature ?? setFanSpeed)?.[1])
+    const predicate = (device: DeviceState) =>
+      targets.some((target) => target.id === device.id) &&
+      (field === "brightness" ? device.type === "light" : field === "temp" ? device.type === "ac" || device.type === "heater" : device.type === "fan")
+    if (targets.length > 1 && roomMatches.length === 0) return { text: `I found multiple matching devices: ${targets.map((device) => device.name).join(", ")}. Which one should I adjust?` }
+    if (!targets.some(predicate)) return { text: `I couldn't find a matching device that supports ${field}.` }
+    if ((field === "brightness" && value > 100) || (field === "speed" && value > 5)) return { text: `${field === "brightness" ? "Brightness" : "Fan speed"} is outside the supported demo range.` }
+    return saveDeviceChanges(
+      predicate,
+      (device) => ({ ...device, [field]: value, on: true }),
+      (names) => `Updated ${names.join(", ")} to ${value}${field === "brightness" ? "%" : field === "temp" ? "°C" : " speed"}.`,
+    )
+  }
+
+  const wantsOn = /\b(?:turn|switch|power)\s+on\b|\b(?:start|activate|enable)\b|\b(?:lights?|devices?)\s+on\b/.test(input)
+  const wantsOff = /\b(?:turn|switch|power)\s+off\b|\b(?:stop|deactivate|disable)\b|\b(?:lights?|devices?)\s+off\b/.test(input)
+  if (wantsOn || wantsOff) {
+    const targetOn = wantsOn && !wantsOff
+    if (wantsOn && wantsOff) return { text: "I found both an on and off instruction. Please send one device action at a time." }
+    const allLights = hasAny(input, ["all lights", "all the lights", "lights in the whole home"])
+    const allDevices = hasAny(input, ["all devices", "everything"])
+    const targets = targetDevices()
+    const isLightGroup = allLights || (!roomMatches.length && hasAny(input, ["lights", "the lights"]))
+    const predicate = (device: DeviceState) => {
+      if (allDevices) return true
+      if (isLightGroup) return device.type === "light" && (!roomMatches.length || roomMatches.some((room) => room.name === device.room))
+      return targets.some((target) => target.id === device.id)
+    }
+    const matched = devices.filter(predicate)
+    if (!matched.length) return { text: "I couldn't identify a matching saved device. Please include the device name or room." }
+    if (matched.length > 1 && !allLights && !allDevices && !isLightGroup && roomMatches.length === 0) {
+      return { text: `Several devices match: ${matched.map((device) => device.name).join(", ")}. Which one do you mean?` }
+    }
+    return saveDeviceChanges(
+      predicate,
+      (device) => ({ ...device, on: targetOn }),
+      (names) => `In the SmartHome+ demo state, turned ${targetOn ? "on" : "off"} ${names.join(", ")}.`,
+    )
+  }
+
+  return null
 }
 
 // Master Command Parser Function
@@ -397,6 +872,8 @@ export function parseAndExecuteCommand(
   rawInput: string,
   onNavigate?: (p: Page) => void,
 ): { text: string; actionTaken?: boolean } {
+  const expandedResult = parseExpandedCommand(rawInput, onNavigate)
+  if (expandedResult) return expandedResult
   const input = rawInput.trim().toLowerCase()
   const clean = input.replace(/[.,?!]/g, "").trim()
 

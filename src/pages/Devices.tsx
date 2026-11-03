@@ -176,6 +176,7 @@ const categories = [
   "All",
   "Lights",
   "Climate",
+  "Air Conditioning",
   "Entertainment",
   "Security",
   "Appliances",
@@ -210,6 +211,17 @@ export default function Devices() {
   const toggleDevice = (id: number) => {
     setDevices((prev) => {
       const next = prev.map((d) => (d.id === id ? { ...d, on: !d.on } : d))
+      saveStoredDevices(next.map(({ icon: _icon, ...device }) => device))
+      return next
+    })
+  }
+
+  const updateDeviceTemperature = (id: number, temperature: number) => {
+    const value = Math.min(30, Math.max(16, temperature))
+    setDevices((prev) => {
+      const next = prev.map((device) =>
+        device.id === id ? { ...device, temp: value } : device,
+      )
       saveStoredDevices(next.map(({ icon: _icon, ...device }) => device))
       return next
     })
@@ -263,6 +275,7 @@ export default function Devices() {
     }
     if (category === "All") return true
     if (category === "Lights") return d.type === "light"
+    if (category === "Air Conditioning") return d.type === "ac"
     if (category === "Climate") return ["ac", "fan", "heater"].includes(d.type)
     if (category === "Entertainment") return d.type === "tv"
     if (category === "Appliances")
@@ -735,7 +748,14 @@ export default function Devices() {
                 type="range"
                 min={16}
                 max={30}
-                defaultValue={(selectedDevice as { temp?: number }).temp ?? 22}
+                value={(selectedDevice as { temp?: number }).temp ?? 22}
+                aria-label={`${selectedDevice.name} temperature set point`}
+                onChange={(event) =>
+                  updateDeviceTemperature(
+                    selectedDevice.id,
+                    Number(event.currentTarget.value),
+                  )
+                }
                 style={{ width: "100%", accentColor: selectedDevice.color }}
               />
             </div>
